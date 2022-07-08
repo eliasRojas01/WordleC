@@ -88,12 +88,12 @@ int main(){
       printf("Desea seguir jugando? (S)i/(N)o\n");
       scanf(" %c", &keep_playing);
     }
-    if(keep_playing == 'N') break;
+    if(keep_playing == 'N')i++;break;
   }
   printf("-----ESTADISTICAS-----\n");
-  print_mean(scores, i+1);
-  print_higher_score(scores, i+1);
-  print_lower_score(scores, i+1);// el i+1 es porque la cantidad de juegos jugados(i) tiene un juego menos
+  print_mean(scores, i);
+  print_higher_score(scores, i);
+  print_lower_score(scores, i);// el i+1 es porque la cantidad de juegos jugados(i) tiene un juego menos
 
   return EXIT_SUCCESS;
 }
@@ -181,7 +181,7 @@ void print_mean(int scores[], int games){//printea el promedio
   for(i = 0; i < games; i++){
     total += scores[i];
   }
-  printf("El puntaje promedio de las partidas fue %.3f\n",total);
+  printf("El puntaje promedio de las partidas fue %.3f\n",total/games);
 }
 void print_higher_score(int scores[],int games){
   int i, greater_num = 0;
