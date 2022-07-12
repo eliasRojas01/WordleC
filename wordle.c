@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>//la importe para strcpy y strchr
 #include <unistd.h>//la importe para pid
+#include <ctype.h>
 
 #define WORD_LENGTH 6 // 5chars + '\0'
 #define MAX_GAMES 8
@@ -10,21 +11,28 @@
 #define TRIES_PER_GAME 6
 #define START_SCORE 5000
 #define WIN_SCORE 2000
+#define HIGHEST_SCORE 10000
+#define LOWEST_SCORE 0
 #define ONE_SHOT_WIN 10000
 #define PENALTY 500
 #define WELL_PLACED_LETTER 100
 #define WRONG_PLACED_LETTER 50
+#define EXTERNAL_FILE "palabras.txt" //reemplazar string por el path del archivo a utilizar
 
 void getWordInLine(char*, int, char*);//funcion provista 
+//utilidades
 int set_score(char[], char[]);
 void reset_tracking(char[]);
 void print_feedback(char[],char[], char[]);
 void clean_stdin();
 void capitalize_word(char[]);
 int user_won(char[]);
+int get_file_lines(char[]);
+//estadisticas
 void print_mean(int[],int);
 void print_higher_score(int[],int);
 void print_lower_score(int[],int);
+
 
 int main(){
   char misterious_word[WORD_LENGTH], guess[WORD_LENGTH], try_feedback[WORD_LENGTH-1];//en misterious_word se almacenara la palabra a adivinar ,en guess el intento y try_feedback tendra el feedback de cada intento
@@ -37,18 +45,19 @@ int main(){
   //cambiar la seed en cada proceso
   srand(getpid());
 
-  printf("Bienvenido a WORDLE\n");
-  printf("Este programa no repite letras y ademas, solo tendra en cuenta las 5 primeras letras de un intento\n");
-
+  printf("BIENVENIDO A WORDLE\n\n");
+  printf("Este programa no repite letras y ademas, solo tendra en cuenta las 5 primeras letras de un intento. El juego tendra el siguiente formato: \n");
+  printf(" + : Si la letra es correcta y esta bien posicionada \n * : Si la letra es correcta pero esta mal posicionada \n - : Si la letra es incorrecta\n");
   printf("Quiere participar de una sesion de juego?: \n (S)i/(N)o \n");
   do{
     printf(">");
     scanf(" %c", &wanna_play);
+    wanna_play = (char)toupper(wanna_play);// casteo el caracter devuelto y lo guardo en la misma variable
   }while(!(wanna_play == 'S' || wanna_play=='N'));//si wanna_play es igual a N o a S, salgo del loop
 
   if( wanna_play == 'N' ){//Si el usuario ingreso N, el programa termina
     printf("Bye bye\n");
-    return 0;
+    return EXIT_SUCCESS;
   }
 
   printf("Ingrese la cantidad de partidas(max. 8): \n");
@@ -58,37 +67,39 @@ int main(){
   }while(total_games > MAX_GAMES || total_games < MIN_GAMES);
 
   for(i = 0; i < total_games; i++){//i sera el numero de partida ;
-    getWordInLine("palabras.txt",rand()%30+1, misterious_word);// obtengo una palabra "random" del archivo palabras.txt 
+    getWordInLine(EXTERNAL_FILE,rand()%get_file_lines(EXTERNAL_FILE)+1, misterious_word);// obtengo una palabra "random" del archivo palabras.txt utilizando get_file_lines, que me devuelve las lineas totales del archivo a leer
     scores[i] = START_SCORE;//cada partida comienza con 5000 
 
     printf("------Partida %d de %d------\n", i+1, total_games);
     for(j = 0 ; j < TRIES_PER_GAME; j++){//j seran los intentos por partida
       scanf("%5s", guess);//Se leeran solo los primeros 5 char
       clean_stdin();// un buffer es un area temporal de almacenamiento,todos los dispositivos tienen buffers de entrada y salida, cuando entra mas informacion de la necesaria, esta queda guardada en el buffer de entrada, entonces ni bien se vuelva a pedir input, esta informacion "basura" sera tomada por la proxima funcion. Por esto uso clean_stdin(),encontrada en github por cierto, para que el proximo loop no agarre "basura" del anterior.
-      capitalize_word(guess);//Se pasaran todas las letras del intento a mayusculas si no las tienen
+      capitalize_word(guess);//se pasaran todas las letras del intento a mayusculas si no las tienen
 
       print_feedback(try_feedback,misterious_word,guess);//printea un feedback y ademas try_feedback obtiene la ultima jugada
       scores[i] += set_score(tracking, try_feedback); //set_score obtendra la puntuacion de cada jugada y ademas se le pasara el tracking para checkear si el usuario gano o no con user_won
 
-      if(user_won(try_feedback) && j==0){
-        printf("Excelente! Ganaste a la primera!\n");
-        scores[i]=ONE_SHOT_WIN;
-        break;//sale de la partida
-      }else if(user_won(try_feedback)){
-        printf("Ganaste!\n");
-        break;//sale de la partida
+      if(user_won(try_feedback) ){//si el usuario gana...
+        if(j==0)
+          scores[i] = HIGHEST_SCORE;
+        printf("Ganaste!");
+        break;
       }
     }
-    if(j == 6)scores[i] = 0;//si no termino la partida antes, deja el puntaje de la partida en 0
-    printf("La palabra era /%s/",misterious_word);
+    if(j == TRIES_PER_GAME)scores[i] = LOWEST_SCORE;//si no termino la partida antes, deja el puntaje de la partida en 0
+    printf("La palabra era: %s",misterious_word);
     printf("Puntaje de la partida : %d\n",scores[i]);
     reset_tracking(tracking);
 
     if(total_games > 1){ //si tiene mas de un juego, consultar para seguir jugando
       printf("Desea seguir jugando? (S)i/(N)o\n");
       scanf(" %c", &keep_playing);
+      keep_playing = (char)toupper(keep_playing);
     }
-    if(keep_playing == 'N')i++;break;
+    if(keep_playing == 'N'){
+      i++;//si el usuario sale antes de que se termine el loop, no se va a agregar el +1 al contador de partidas jugadas, entonces lo agrego ahora
+      break;
+    }
   }
   printf("-----ESTADISTICAS-----\n");
   print_mean(scores, i);
@@ -181,7 +192,7 @@ void print_mean(int scores[], int games){//printea el promedio
   for(i = 0; i < games; i++){
     total += scores[i];
   }
-  printf("El puntaje promedio de las partidas fue %.3f\n",total/games);
+  printf("El puntaje promedio de %d partida(s) fue %.3f\n",games,total/games);
 }
 void print_higher_score(int scores[],int games){
   int i, greater_num = 0;
@@ -190,7 +201,7 @@ void print_higher_score(int scores[],int games){
       greater_num=scores[i];
     }
   }
-  printf("El puntaje mas alto del juego fue %d en la partida %d\n",greater_num,i-1);
+  printf("El puntaje mas alto del juego fue %d en la partida %d\n",greater_num,i);
 }
 void print_lower_score(int scores[],int games){
   int i, lowest_num;
@@ -204,14 +215,9 @@ void print_lower_score(int scores[],int games){
   printf("El puntaje mas bajo del juego fue %d en la partida %d\n",lowest_num,game);
 }
 void capitalize_word(char guess[]){
-  //aprovechando de que las mayusculas y las minusculas tiene 32 posiciones de diferencia en la tabla ascii
-  int i, ascii_character_num;
-  char num_to_char;
-  for(i = 0; i < WORD_LENGTH-1; i++){
-    if(( ascii_character_num = guess[i] ) > 96){//si encuentro que el valor de numero del caracter en ascii es mayor que 96, definitivamente es una letra minuscula, entonces la paso a mayuscula restandole 32
-      num_to_char = ascii_character_num-32;
-      guess[i] = num_to_char;
-    }
+  int i;
+  for(i = 0; i < strlen(guess); i++){
+    guess[i] = (char)toupper(guess[i]);//ya que me devuelve el entero, casteo ese entero en un char
   }
 }
 void clean_stdin(void){
@@ -219,4 +225,22 @@ void clean_stdin(void){
   do{
     c = getchar();
   }while(c != '\n' && c != EOF);//mientras c sea distinto de \n y EOF, sigue tomando caracteres
+}
+int get_file_lines(char file_name[]){
+  FILE *fp;//puntero a un archivo
+  int line_count = 0;//contador de lineas, cuenta cada '\n' del archivo
+  char file_char;
+
+  fp = fopen(file_name,"r");//abro el archivo para leer nomas
+  if(fp == NULL){//si falla, devolviendo null, sale de la funcion.
+    return EXIT_FAILURE;
+  }
+  while((file_char = fgetc(fp)) != EOF){//fgetc lee el siguiente caracter de fp y lo devuelve como un unsigned char casteado a int o EOF al final de linea o en un error
+                                        //aca a medida que leo los caracteres del puntero fp, los asigno a file_char y los comparo, si no es el final de linea, el loop continua. Luego lo comparo con el caracter de nueva linea, si encuentra que tienen el mismo valor, le sumo uno a la cuenta de lineas del archivo.
+    if(file_char == '\n')
+      line_count++;
+  }
+  fclose(fp);//cierro el archivo para evitar tener basura dando vuelta
+  
+  return line_count;
 }
